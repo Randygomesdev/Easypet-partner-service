@@ -85,6 +85,7 @@ public class StaffService {
         return staffMapper.toResponse(staff);
     }
 
+    @Transactional
     public StaffResponse updateStaff(UUID staffId, StaffRequest request) {
         log.info("Atualizando profissional ID: {}", staffId);
         Staff staff = staffRepository.findById(staffId)
