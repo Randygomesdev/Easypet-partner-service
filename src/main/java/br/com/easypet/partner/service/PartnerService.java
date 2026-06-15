@@ -12,8 +12,10 @@ import br.com.easypet.partner.repository.PartnerReviewRepository;
 import br.com.easypet.partner.exception.ResourceNotFoundException;
 import br.com.easypet.partner.mapper.PartnerMapper;
 import br.com.easypet.partner.repository.PartnerRepository;
+import br.com.easypet.partner.domain.entity.ServiceCategory;
 import br.com.easypet.partner.domain.entity.ServiceOffer;
 import br.com.easypet.partner.dto.request.ServiceOfferRequest;
+import br.com.easypet.partner.repository.ServiceCategoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -38,6 +40,7 @@ public class PartnerService {
     private final PartnerReviewRepository partnerReviewRepository;
     private final ReviewMapper reviewMapper;
     private final GeocodingService geocodingService;
+    private final ServiceCategoryRepository serviceCategoryRepository;
 
     @Transactional(readOnly = true)
     public PartnerResponse findByCurrentUser() {
@@ -145,15 +148,21 @@ public class PartnerService {
                 partner.getServices().clear();
             }
             List<ServiceOffer> newServices = request.services().stream()
-                    .map(s -> ServiceOffer.builder()
-                            .name(s.name())
-                            .description(s.description())
-                            .price(s.price())
-                            .durationMinutes(s.durationMinutes())
-                            .billingUnit(s.billingUnit() != null ? s.billingUnit() : br.com.easypet.partner.domain.model.BillingUnit.HOURLY)
-                            .partner(partner)
-                            .active(true)
-                            .build())
+                    .map(s -> {
+                        ServiceCategory cat = s.categoryId() != null
+                                ? serviceCategoryRepository.findById(s.categoryId()).orElse(null)
+                                : null;
+                        return ServiceOffer.builder()
+                                .name(s.name())
+                                .description(s.description())
+                                .price(s.price())
+                                .durationMinutes(s.durationMinutes())
+                                .billingUnit(s.billingUnit() != null ? s.billingUnit() : br.com.easypet.partner.domain.model.BillingUnit.HOURLY)
+                                .category(cat)
+                                .partner(partner)
+                                .active(true)
+                                .build();
+                    })
                     .collect(Collectors.toList());
             partner.getServices().addAll(newServices);
         }
@@ -215,12 +224,17 @@ public class PartnerService {
         Partner partner = partnerRepository.findById(partnerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parceiro não encontrado"));
 
+        ServiceCategory category = request.categoryId() != null
+                ? serviceCategoryRepository.findById(request.categoryId()).orElse(null)
+                : null;
+
         br.com.easypet.partner.domain.entity.ServiceOffer service = br.com.easypet.partner.domain.entity.ServiceOffer.builder()
                 .name(request.name())
                 .description(request.description())
                 .price(request.price())
                 .durationMinutes(request.durationMinutes())
                 .billingUnit(request.billingUnit() != null ? request.billingUnit() : br.com.easypet.partner.domain.model.BillingUnit.HOURLY)
+                .category(category)
                 .partner(partner)
                 .active(true)
                 .build();
@@ -229,7 +243,7 @@ public class PartnerService {
             partner.setServices(new java.util.ArrayList<>());
         }
         partner.getServices().add(service);
-        
+
         return partnerMapper.toResponse(partnerRepository.save(partner));
     }
 
