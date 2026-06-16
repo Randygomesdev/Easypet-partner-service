@@ -1,9 +1,11 @@
 package br.com.easypet.partner.service;
 
 import br.com.easypet.partner.domain.entity.Partner;
+import br.com.easypet.partner.domain.entity.Staff;
 import br.com.easypet.partner.domain.model.PartnerCategory;
 import br.com.easypet.partner.dto.request.PartnerRequest;
 import br.com.easypet.partner.dto.response.PartnerResponse;
+import br.com.easypet.partner.dto.response.ServiceResponse;
 import br.com.easypet.partner.dto.request.ReviewRequest;
 import br.com.easypet.partner.dto.response.ReviewResponse;
 import br.com.easypet.partner.domain.entity.PartnerReview;
@@ -12,6 +14,8 @@ import br.com.easypet.partner.repository.PartnerReviewRepository;
 import br.com.easypet.partner.exception.ResourceNotFoundException;
 import br.com.easypet.partner.mapper.PartnerMapper;
 import br.com.easypet.partner.repository.PartnerRepository;
+import br.com.easypet.partner.repository.ServiceOfferRepository;
+import br.com.easypet.partner.repository.StaffRepository;
 import br.com.easypet.partner.domain.entity.ServiceCategory;
 import br.com.easypet.partner.domain.entity.ServiceOffer;
 import br.com.easypet.partner.dto.request.ServiceOfferRequest;
@@ -25,7 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.context.SecurityContextHolder;
 import br.com.easypet.partner.security.UserPrincipal;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -41,6 +47,8 @@ public class PartnerService {
     private final ReviewMapper reviewMapper;
     private final GeocodingService geocodingService;
     private final ServiceCategoryRepository serviceCategoryRepository;
+    private final ServiceOfferRepository serviceOfferRepository;
+    private final StaffRepository staffRepository;
 
     @Transactional(readOnly = true)
     public PartnerResponse findByCurrentUser() {
@@ -219,7 +227,7 @@ public class PartnerService {
         partnerRepository.save(partner);
     }
 
-    public PartnerResponse addService(UUID partnerId, br.com.easypet.partner.dto.request.ServiceOfferRequest request) {
+    public ServiceResponse addService(UUID partnerId, ServiceOfferRequest request) {
         log.info("Adicionando serviço '{}' ao parceiro ID: {}", request.name(), partnerId);
         Partner partner = partnerRepository.findById(partnerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parceiro não encontrado"));
@@ -228,7 +236,7 @@ public class PartnerService {
                 ? serviceCategoryRepository.findById(request.categoryId()).orElse(null)
                 : null;
 
-        br.com.easypet.partner.domain.entity.ServiceOffer service = br.com.easypet.partner.domain.entity.ServiceOffer.builder()
+        ServiceOffer service = ServiceOffer.builder()
                 .name(request.name())
                 .description(request.description())
                 .price(request.price())
@@ -243,8 +251,60 @@ public class PartnerService {
             partner.setServices(new java.util.ArrayList<>());
         }
         partner.getServices().add(service);
+        partnerRepository.save(partner);
 
-        return partnerMapper.toResponse(partnerRepository.save(partner));
+        if (request.staffIds() != null && !request.staffIds().isEmpty()) {
+            List<Staff> staffMembers = staffRepository.findAllById(request.staffIds());
+            for (Staff staff : staffMembers) {
+                if (staff.getServices() == null) staff.setServices(new HashSet<>());
+                staff.getServices().add(service);
+            }
+            staffRepository.saveAll(staffMembers);
+        }
+
+        return partnerMapper.toServiceResponse(service);
+    }
+
+    public ServiceResponse updateService(UUID partnerId, UUID serviceId, ServiceOfferRequest request) {
+        log.info("Atualizando serviço ID: {} do parceiro ID: {}", serviceId, partnerId);
+        ServiceOffer service = serviceOfferRepository.findById(serviceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Serviço não encontrado"));
+
+        ServiceCategory category = request.categoryId() != null
+                ? serviceCategoryRepository.findById(request.categoryId()).orElse(null)
+                : null;
+
+        service.setName(request.name());
+        service.setDescription(request.description());
+        service.setPrice(request.price());
+        service.setDurationMinutes(request.durationMinutes());
+        if (request.billingUnit() != null) service.setBillingUnit(request.billingUnit());
+        service.setCategory(category);
+        serviceOfferRepository.save(service);
+
+        if (request.staffIds() != null) {
+            List<Staff> currentLinked = staffRepository.findByServicesId(serviceId);
+            Set<UUID> newIds = new HashSet<>(request.staffIds());
+
+            for (Staff staff : currentLinked) {
+                if (!newIds.contains(staff.getId())) {
+                    staff.getServices().removeIf(s -> s.getId().equals(serviceId));
+                    staffRepository.save(staff);
+                }
+            }
+
+            Set<UUID> currentIds = currentLinked.stream().map(Staff::getId).collect(Collectors.toSet());
+            List<Staff> toAdd = staffRepository.findAllById(
+                    request.staffIds().stream().filter(id -> !currentIds.contains(id)).collect(Collectors.toList())
+            );
+            for (Staff staff : toAdd) {
+                if (staff.getServices() == null) staff.setServices(new HashSet<>());
+                staff.getServices().add(service);
+                staffRepository.save(staff);
+            }
+        }
+
+        return partnerMapper.toServiceResponse(service);
     }
 
     public ReviewResponse addReview(UUID partnerId, ReviewRequest request) {

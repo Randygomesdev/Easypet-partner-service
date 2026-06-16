@@ -66,6 +66,10 @@ public class StaffService {
         List<Staff> staffList;
         if (serviceId != null) {
             staffList = staffRepository.findByPartnerIdAndServicesIdAndStatus(partnerId, serviceId, status != null ? status : StaffStatus.ACTIVE);
+            if (staffList.isEmpty()) {
+                // Nenhum staff vinculado ao serviço: retorna todos os ativos do parceiro
+                staffList = staffRepository.findByPartnerIdAndStatus(partnerId, status != null ? status : StaffStatus.ACTIVE);
+            }
         } else if (status != null) {
             staffList = staffRepository.findByPartnerIdAndStatus(partnerId, status);
         } else {

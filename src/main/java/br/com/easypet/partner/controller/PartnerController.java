@@ -2,9 +2,11 @@ package br.com.easypet.partner.controller;
 
 import br.com.easypet.partner.domain.model.PartnerCategory;
 import br.com.easypet.partner.dto.request.PartnerRequest;
+import br.com.easypet.partner.dto.request.ServiceOfferRequest;
 import br.com.easypet.partner.dto.response.PartnerResponse;
-import br.com.easypet.partner.dto.request.ReviewRequest;
 import br.com.easypet.partner.dto.response.ReviewResponse;
+import br.com.easypet.partner.dto.response.ServiceResponse;
+import br.com.easypet.partner.dto.request.ReviewRequest;
 import br.com.easypet.partner.service.PartnerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -89,10 +91,19 @@ public class PartnerController {
 
     @PostMapping("/{id}/services")
     @Operation(summary = "Adicionar serviço ao parceiro", description = "Cadastra um novo serviço para um parceiro específico.")
-    public ResponseEntity<PartnerResponse> addService(
+    public ResponseEntity<ServiceResponse> addService(
             @PathVariable(name = "id") UUID id,
-            @Valid @RequestBody br.com.easypet.partner.dto.request.ServiceOfferRequest request) {
+            @Valid @RequestBody ServiceOfferRequest request) {
         return ResponseEntity.ok(partnerService.addService(id, request));
+    }
+
+    @PutMapping("/{id}/services/{serviceId}")
+    @Operation(summary = "Atualizar serviço do parceiro", description = "Atualiza um serviço específico e vincula colaboradores.")
+    public ResponseEntity<ServiceResponse> updateService(
+            @PathVariable(name = "id") UUID id,
+            @PathVariable(name = "serviceId") UUID serviceId,
+            @Valid @RequestBody ServiceOfferRequest request) {
+        return ResponseEntity.ok(partnerService.updateService(id, serviceId, request));
     }
 
     @PostMapping("/{id}/reviews")
